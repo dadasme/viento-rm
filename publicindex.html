@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Viento en vivo — Región Metropolitana</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, sans-serif; }
+  #map { height: 100%; }
+  .panel {
+    position: absolute; top: 10px; right: 10px; z-index: 1000;
+    background: rgba(255,255,255,0.95); border-radius: 10px;
+    padding: 10px 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    font-size: 13px; max-width: 230px;
+  }
+  .panel h1 { font-size: 15px; margin: 0 0 6px; }
+  .legend-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .muted { color: #666; font-size: 11px; margin-top: 6px; }
+  .wind-arrow { display: flex; align-items: center; justify-content: center; }
+  .wind-arrow svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
+  .calm-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <h1>🌬️ Viento RM en vivo</h1>
+  <div class="legend-row"><span class="dot" style="background:#9e9e9e"></span> Calma (&lt;5 km/h)</div>
+  <div class="legend-row"><span class="dot" style="background:#2e9e4f"></span> Suave (5–15)</div>
+  <div class="legend-row"><span class="dot" style="background:#e0b020"></span> Moderado (15–30)</div>
+  <div class="legend-row"><span class="dot" style="background:#e87722"></span> Fuerte (30–50)</div>
+  <div class="legend-row"><span class="dot" style="background:#d32f2f"></span> Muy fuerte (&gt;50)</div>
+  <div class="muted">La flecha apunta hacia donde se dirige el viento.</div>
+  <div class="muted" id="status">Cargando datos…</div>
+  <button id="stormBtn" style="margin-top:8px;width:100%;padding:6px;border:none;border-radius:6px;
+    background:#5a2da0;color:#fff;font-weight:600;cursor:pointer">⚡ Modo tormenta (1 h)</button>
+  <div class="muted" id="stormStatus"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map("map").setView([-33.48, -70.66], 10);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: '&copy; OpenStreetMap | Datos: Weather Underground PWS',
+  maxZoom: 18,
+}).addTo(map);
+
+// --- Capas activables ---
+const windLayer = L.layerGroup().addTo(map);     // viento: activa por defecto
+const gustLayer = L.layerGroup();                // ráfagas destacadas
+const pressureLayer = L.layerGroup();            // presión
+const rainLayer = L.layerGroup();                // lluvia
+const tempLayer = L.layerGroup();                // temperatura
+
+L.control.layers(null, {
+  "🌬️ Viento": windLayer,
+  "🌪️ Ráfagas >40 km/h": gustLayer,
+  "🔻 Presión (hPa)": pressureLayer,
+  "🌧️ Lluvia (mm/h)": rainLayer,
+  "🌡️ Temperatura (°C)": tempLayer,
+}, { collapsed: false, position: "bottomright" }).addTo(map);
+
+function colorFor(speed) {
+  if (speed == null || speed < 5) return "#9e9e9e";
+  if (speed < 15) return "#2e9e4f";
+  if (speed < 30) return "#e0b020";
+  if (speed < 50) return "#e87722";
+  return "#d32f2f";
+}
+
+// windDir = dirección DESDE donde sopla; la flecha apunta hacia donde VA (+180°)
+function arrowIcon(windDir, speed, stale) {
+  const color = colorFor(speed);
+  const opacity = stale ? 0.35 : 1;
+  if (speed == null || speed < 2 || windDir == null) {
+    return L.divIcon({
+      className: "wind-arrow",
+      html: `<div class="calm-dot" style="background:${color};opacity:${opacity}"></div>`,
+      iconSize: [18, 18], iconAnchor: [9, 9],
+    });
+  }
+  const rot = (windDir + 180) % 360;
+  const size = 30 + Math.min(speed, 60) * 0.4; // flecha crece con la velocidad
+  return L.divIcon({
+    className: "wind-arrow",
+    html: `<svg width="${size}" height="${size}" viewBox="0 0 24 24"
+             style="transform: rotate(${rot}deg); opacity:${opacity}">
+             <path d="M12 2 L17 13 L12 10.5 L7 13 Z" fill="${color}" stroke="#fff" stroke-width="0.8"/>
+           </svg>`,
+    iconSize: [size, size], iconAnchor: [size / 2, size / 2],
+  });
+}
+
+function dirText(deg) {
+  if (deg == null) return "—";
+  const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSO","SO","OSO","O","ONO","NO","NNO"];
+  return dirs[Math.round(deg / 22.5) % 16] + ` (${deg}°)`;
+}
+
+// --- Escalas de color para las capas ---
+function tempColor(t) {
+  if (t == null) return "#999";
+  if (t <= 0) return "#5a2da0";
+  if (t <= 8) return "#1565c0";
+  if (t <= 15) return "#2e9e4f";
+  if (t <= 24) return "#e0b020";
+  if (t <= 30) return "#e87722";
+  return "#d32f2f";
+}
+function pressureColor(p) {
+  if (p == null) return "#999";
+  if (p < 1000) return "#d32f2f";   // muy baja: señal de mal tiempo
+  if (p < 1008) return "#e87722";
+  if (p < 1015) return "#e0b020";
+  if (p < 1022) return "#2e9e4f";
+  return "#1565c0";                  // alta: tiempo estable
+}
+function rainColor(r) {
+  if (r == null || r === 0) return "#bbb";
+  if (r < 2) return "#90caf9";
+  if (r < 10) return "#1e88e5";
+  if (r < 25) return "#0d47a1";
+  return "#5a2da0";                  // lluvia torrencial
+}
+
+// Etiqueta pequeña ("badge") alrededor del punto de la estación.
+// offset desplaza cada capa a una esquina distinta para que no se tapen.
+function badge(text, bg, offset, popupHtml) {
+  const icon = L.divIcon({
+    className: "",
+    html: `<div style="background:${bg};color:#fff;font-size:10px;font-weight:700;
+      padding:1px 5px;border-radius:8px;border:1px solid #fff;white-space:nowrap;
+      box-shadow:0 1px 3px rgba(0,0,0,0.4);transform:translate(${offset[0]}px,${offset[1]}px);
+      display:inline-block">${text}</div>`,
+    iconSize: [0, 0],
+  });
+  return (lat, lon) => {
+    const m = L.marker([lat, lon], { icon, interactive: true });
+    if (popupHtml) m.bindPopup(popupHtml);
+    return m;
+  };
+}
+
+async function loadData() {
+  try {
+    const res = await fetch("/api/wind");
+    const data = await res.json();
+    const status = document.getElementById("status");
+
+    if (!data.stations || data.stations.length === 0) {
+      status.textContent = "Aún sin datos. El servidor está iniciando…";
+      return;
+    }
+
+    windLayer.clearLayers();
+    gustLayer.clearLayers();
+    pressureLayer.clearLayers();
+    rainLayer.clearLayers();
+    tempLayer.clearLayers();
+    const now = Date.now() / 1000;
+
+    data.stations.forEach(s => {
+      const stale = s.epoch && (now - s.epoch > 3600); // sin reporte hace +1h
+      const popup = `
+        <b>${s.name}</b> <small>(${s.id})</small><br>
+        💨 Viento: <b>${s.windSpeed ?? "—"} km/h</b> ${dirText(s.windDir)}<br>
+        🌪️ Ráfagas: ${s.windGust ?? "—"} km/h<br>
+        🔻 Presión: ${s.pressure ?? "—"} hPa<br>
+        🌧️ Lluvia: ${s.precipRate ?? "—"} mm/h (hoy: ${s.precipTotal ?? "—"} mm)<br>
+        🌡️ ${s.temp ?? "—"} °C · 💧 ${s.humidity ?? "—"}%<br>
+        <small>Obs: ${s.obsTimeLocal ?? "—"}${stale ? " ⚠️ desactualizada" : ""}</small>
+      `;
+
+      // Capa viento (flechas)
+      const m = L.marker([s.lat, s.lon], { icon: arrowIcon(s.windDir, s.windSpeed, stale) });
+      m.bindPopup(popup);
+      m.addTo(windLayer);
+
+      if (stale) return; // datos viejos: solo aparecen en la capa de viento, atenuados
+
+      // Capa ráfagas destacadas (umbral 40 km/h)
+      if (s.windGust != null && s.windGust >= 40) {
+        badge(`⚠ ${Math.round(s.windGust)} km/h`, "#d32f2f", [10, -22], popup)(s.lat, s.lon).addTo(gustLayer);
+      }
+      // Capa presión (esquina inferior derecha del punto)
+      if (s.pressure != null) {
+        badge(`${s.pressure.toFixed(0)}`, pressureColor(s.pressure), [10, 10], popup)(s.lat, s.lon).addTo(pressureLayer);
+      }
+      // Capa lluvia (esquina inferior izquierda) — solo estaciones con lluvia
+      if (s.precipRate != null && s.precipRate > 0) {
+        badge(`${s.precipRate.toFixed(1)}`, rainColor(s.precipRate), [-30, 10], popup)(s.lat, s.lon).addTo(rainLayer);
+      }
+      // Capa temperatura (esquina superior izquierda)
+      if (s.temp != null) {
+        badge(`${s.temp.toFixed(0)}°`, tempColor(s.temp), [-28, -22], popup)(s.lat, s.lon).addTo(tempLayer);
+      }
+    });
+
+    const t = new Date(data.updatedAt);
+    status.textContent = `${data.stations.length} estaciones · actualizado ${t.toLocaleTimeString("es-CL")} · refresco cada ${data.refreshMinutes} min`;
+    updateStormUI(data.stormUntil || 0);
+  } catch (e) {
+    document.getElementById("status").textContent = "Error al cargar datos.";
+  }
+}
+
+// --- Modo tormenta ---
+const stormBtn = document.getElementById("stormBtn");
+const stormStatus = document.getElementById("stormStatus");
+let stormActive = false;
+
+function updateStormUI(stormUntil) {
+  stormActive = stormUntil > Date.now();
+  if (stormActive) {
+    const minsLeft = Math.ceil((stormUntil - Date.now()) / 60000);
+    stormBtn.style.background = "#d32f2f";
+    stormBtn.textContent = `🌪️ Tormenta activa (${minsLeft} min)`;
+    stormStatus.textContent = "Estaciones con más viento: cada 2 min.";
+  } else {
+    stormBtn.style.background = "#5a2da0";
+    stormBtn.textContent = "⚡ Modo tormenta (1 h)";
+    stormStatus.textContent = "";
+  }
+}
+
+stormBtn.addEventListener("click", async () => {
+  if (stormActive) return;
+  stormBtn.textContent = "Activando…";
+  try {
+    const res = await fetch("/api/storm/start");
+    const data = await res.json();
+    if (data.ok) {
+      updateStormUI(data.stormUntil);
+      setTimeout(loadData, 5000); // recoger los primeros datos rápidos
+    } else {
+      stormStatus.textContent = data.reason || "No se pudo activar.";
+      updateStormUI(0);
+    }
+  } catch (e) {
+    stormStatus.textContent = "Error de conexión.";
+    updateStormUI(0);
+  }
+});
+
+loadData();
+// Re-lee el caché del servidor: cada 30 s en modo tormenta, cada 1 min normal
+setInterval(() => loadData(), 30 * 1000);
+</script>
+</body>
+</html>

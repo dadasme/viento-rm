@@ -1,0 +1,15 @@
+{
+  "name": "viento-rm",
+  "version": "1.0.0",
+  "description": "Monitor de viento en tiempo real para la Región Metropolitana de Santiago (datos PWS de Weather Underground)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
