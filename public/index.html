@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Viento en vivo — Región Metropolitana</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet-velocity@2.1.4/dist/leaflet-velocity.min.css" />
 <style>
   html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, sans-serif; }
   #map { height: 100%; }
@@ -22,12 +23,22 @@
   .wind-arrow svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
   .calm-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff;
               box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  .regions { display: flex; gap: 4px; margin: 6px 0 2px; }
+  .regions button { flex: 1; padding: 4px 2px; border: 1px solid #ccc; border-radius: 6px;
+                    background: #f4f4f4; font-size: 11px; cursor: pointer; }
+  .regions button:hover { background: #e0e0e0; }
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div class="panel">
   <h1>🌬️ Viento en vivo — Valpo · RM · O'Higgins</h1>
+  <div class="regions">
+    <button onclick="goRegion('valpo')">Valpo</button>
+    <button onclick="goRegion('rm')">RM</button>
+    <button onclick="goRegion('ohiggins')">O'Higgins</button>
+    <button onclick="goRegion('todo')">Todo</button>
+  </div>
   <div class="legend-row"><span class="dot" style="background:#9e9e9e"></span> Calma (&lt;5 km/h)</div>
   <div class="legend-row"><span class="dot" style="background:#2e9e4f"></span> Suave (5–15)</div>
   <div class="legend-row"><span class="dot" style="background:#e0b020"></span> Moderado (15–30)</div>
@@ -36,11 +47,12 @@
   <div class="muted">La flecha apunta hacia donde se dirige el viento.</div>
   <div class="muted" id="status">Cargando datos…</div>
   <button id="stormBtn" style="margin-top:8px;width:100%;padding:6px;border:none;border-radius:6px;
-    background:#5a2da0;color:#fff;font-weight:600;cursor:pointer">⚡ Modo tormenta (1 h)</button>
+    background:#5a2da0;color:#fff;font-weight:600;cursor:pointer">⚡ Modo extremo · 5 min (1 h)</button>
   <div class="muted" id="stormStatus"></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-velocity@2.1.4/dist/leaflet-velocity.min.js"></script>
 <script>
 const map = L.map("map").setView([-33.65, -70.95], 8);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -49,21 +61,33 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 // --- Capas activables ---
-const fieldLayer = L.layerGroup().addTo(map);     // campo de viento (modelo), activa por defecto
+const fieldLayer = L.layerGroup();               // flechas del modelo (opcional)
 const windLayer = L.layerGroup().addTo(map);     // estaciones reales: activa por defecto
 const gustLayer = L.layerGroup();                // ráfagas destacadas
 const pressureLayer = L.layerGroup();            // presión
 const rainLayer = L.layerGroup();                // lluvia
 const tempLayer = L.layerGroup();                // temperatura
 
-L.control.layers(null, {
-  "🌐 Campo de viento (modelo)": fieldLayer,
+const layerControl = L.control.layers(null, {
+  "🌐 Flechas del modelo": fieldLayer,
   "🌬️ Estaciones reales": windLayer,
   "🌪️ Ráfagas >40 km/h": gustLayer,
   "🔻 Presión (hPa)": pressureLayer,
   "🌧️ Lluvia (mm/h)": rainLayer,
   "🌡️ Temperatura (°C)": tempLayer,
 }, { collapsed: false, position: "bottomright" }).addTo(map);
+
+// --- Navegación rápida por región ---
+function goRegion(r) {
+  const views = {
+    valpo: [[-32.95, -71.30], 9],
+    rm: [[-33.50, -70.70], 10],
+    ohiggins: [[-34.40, -71.00], 9],
+    todo: [[-33.65, -70.95], 8],
+  };
+  const v = views[r];
+  if (v) map.setView(v[0], v[1]);
+}
 
 function colorFor(speed) {
   if (speed == null || speed < 5) return "#9e9e9e";
@@ -180,6 +204,34 @@ async function loadGrid() {
   } catch (e) { /* la grilla es opcional; si falla, las estaciones siguen */ }
 }
 
+// --- Animación tipo Windy (partículas fluyendo) ---
+let velLayer = null;
+async function loadVelocity() {
+  try {
+    const res = await fetch("/api/velocity");
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length < 2) return;
+    if (velLayer) {
+      velLayer.setData(data);
+      return;
+    }
+    velLayer = L.velocityLayer({
+      displayValues: true,
+      displayOptions: {
+        velocityType: "Viento",
+        position: "bottomleft",
+        emptyString: "Sin datos de viento",
+        speedUnit: "k/h",
+      },
+      data,
+      maxVelocity: 15,        // m/s para la escala de color
+      velocityScale: 0.01,    // tamaño del movimiento de las partículas
+    });
+    velLayer.addTo(map);
+    layerControl.addOverlay(velLayer, "🌀 Animación de viento");
+  } catch (e) { /* opcional: si falla, el resto del mapa sigue */ }
+}
+
 async function loadData() {
   try {
     const res = await fetch("/api/wind");
@@ -236,28 +288,29 @@ async function loadData() {
     });
 
     const t = new Date(data.updatedAt);
-    status.textContent = `${data.stations.length} estaciones · actualizado ${t.toLocaleTimeString("es-CL")} · refresco cada ${data.refreshMinutes} min`;
-    updateStormUI(data.stormUntil || 0);
+    const fastTxt = data.fast ? " · ⚡ seguimiento rápido (5 min)" : "";
+    status.textContent = `${data.stations.length} estaciones · actualizado ${t.toLocaleTimeString("es-CL")} · refresco cada ${data.refreshMinutes} min${fastTxt}`;
+    updateStormUI(data.forceFastUntil || 0);
   } catch (e) {
     document.getElementById("status").textContent = "Error al cargar datos.";
   }
 }
 
-// --- Modo tormenta ---
+// --- Modo extremo (manual) ---
 const stormBtn = document.getElementById("stormBtn");
 const stormStatus = document.getElementById("stormStatus");
 let stormActive = false;
 
-function updateStormUI(stormUntil) {
-  stormActive = stormUntil > Date.now();
+function updateStormUI(until) {
+  stormActive = until > Date.now();
   if (stormActive) {
-    const minsLeft = Math.ceil((stormUntil - Date.now()) / 60000);
+    const minsLeft = Math.ceil((until - Date.now()) / 60000);
     stormBtn.style.background = "#d32f2f";
-    stormBtn.textContent = `🌪️ Tormenta activa (${minsLeft} min)`;
-    stormStatus.textContent = "Estaciones con más viento: cada 2 min.";
+    stormBtn.textContent = `🌪️ Modo extremo activo (${minsLeft} min)`;
+    stormStatus.textContent = "Estaciones con más viento: cada 5 min.";
   } else {
     stormBtn.style.background = "#5a2da0";
-    stormBtn.textContent = "⚡ Modo tormenta (1 h)";
+    stormBtn.textContent = "⚡ Modo extremo · 5 min (1 h)";
     stormStatus.textContent = "";
   }
 }
@@ -266,10 +319,10 @@ stormBtn.addEventListener("click", async () => {
   if (stormActive) return;
   stormBtn.textContent = "Activando…";
   try {
-    const res = await fetch("/api/storm/start");
+    const res = await fetch("/api/extreme/start");
     const data = await res.json();
     if (data.ok) {
-      updateStormUI(data.stormUntil);
+      updateStormUI(data.forceFastUntil);
       setTimeout(loadData, 5000); // recoger los primeros datos rápidos
     } else {
       stormStatus.textContent = data.reason || "No se pudo activar.";
@@ -283,9 +336,10 @@ stormBtn.addEventListener("click", async () => {
 
 loadData();
 loadGrid();
-// Re-lee el caché del servidor cada 30 s (estaciones) y cada 1 min (grilla del modelo)
+loadVelocity();
+// Re-lee el caché del servidor cada 30 s (estaciones) y cada 1 min (modelo y animación)
 setInterval(() => loadData(), 30 * 1000);
-setInterval(() => loadGrid(), 60 * 1000);
+setInterval(() => { loadGrid(); loadVelocity(); }, 60 * 1000);
 </script>
 </body>
 </html>
