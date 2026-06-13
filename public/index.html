@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Viento en vivo — Región Metropolitana</title>
+<title>Puelche — Monitor de viento en vivo</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet-velocity@2.1.4/dist/leaflet-velocity.min.css" />
 <style>
@@ -27,12 +27,42 @@
   .regions button { flex: 1; padding: 4px 2px; border: 1px solid #ccc; border-radius: 6px;
                     background: #f4f4f4; font-size: 11px; cursor: pointer; }
   .regions button:hover { background: #e0e0e0; }
+  .credit {
+    position: absolute; bottom: 8px; left: 8px; z-index: 1000;
+    background: rgba(255,255,255,0.9); border-radius: 8px;
+    padding: 6px 10px 6px 6px; display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2); font-size: 11px; color: #333;
+  }
+  .credit .sig { width: 34px; height: 42px; flex-shrink: 0; }
+  .credit .by { line-height: 1.3; }
+  .credit .by b { font-size: 12px; }
+  .credit a { color: #5a2da0; text-decoration: none; }
+  .credit a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
 <div id="map"></div>
+<div class="credit">
+  <svg class="sig" viewBox="0 0 160 200" xmlns="http://www.w3.org/2000/svg">
+    <g fill="none" stroke="#333" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M74 20 C 60 42, 52 72, 56 102 C 60 132, 80 152, 96 168 C 108 180, 110 192, 101 197 C 94 200, 88 191, 91 183"/>
+      <path d="M86 24 C 104 40, 118 66, 119 96 C 120 126, 108 150, 92 168"/>
+      <path d="M70 92 q -13 2 -15 15 q -2 11 8 11 q 9 0 11 -13 q 1 -8 1 -16"/>
+      <path d="M73 80 q 2 18 0 30"/>
+      <circle cx="83" cy="96" r="2.4" fill="#333" stroke="none"/>
+      <circle cx="88" cy="92" r="2.4" fill="#333" stroke="none"/>
+      <path d="M66 122 q -12 3 -13 15 q -1 10 9 9 q 8 -1 9 -14 q 0 -6 -1 -10 q 3 14 5 20"/>
+      <path d="M78 128 q 9 -3 9 4 q 0 6 -8 7 q 8 0 8 7 q 0 7 -9 6"/>
+    </g>
+  </svg>
+  <div class="by">
+    <b>Diego Ignacio Adasme Sabja</b><br>
+    Puelche · 2026 · <a href="mailto:die.adasme@gmail.com">die.adasme@gmail.com</a>
+  </div>
+</div>
 <div class="panel">
-  <h1>🌬️ Viento en vivo — Valpo · RM · O'Higgins</h1>
+  <h1>🌬️ Puelche — Monitor de viento en vivo</h1>
+  <div class="muted" style="margin-top:0;margin-bottom:4px">Valparaíso · Metropolitana · O'Higgins</div>
   <div class="regions">
     <button onclick="goRegion('valpo')">Valpo</button>
     <button onclick="goRegion('rm')">RM</button>
