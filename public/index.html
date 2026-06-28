@@ -21,7 +21,9 @@
   }
   .panel h1 { font-size: 17px; margin: 0 0 6px; font-family: 'Electrolize', system-ui, sans-serif;
               display: flex; align-items: center; justify-content: center; gap: 7px; color: #1a3a5c; }
-  .brand-logo { width: 78px; height: 78px; flex-shrink: 0; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .brand-logo { width: 64px; height: 64px; flex-shrink: 0; }
+  .brand-sub { margin: 0 !important; font-size: 12px; line-height: 1.35; }
   .legend-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
   .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
   .muted { color: #666; font-size: 11px; margin-top: 6px; }
@@ -61,8 +63,10 @@
   </div>
 </div>
 <div class="panel">
-  <h1><img src="logo.png" alt="Puelche" class="brand-logo" /></h1>
-  <div class="muted" style="margin-top:0;margin-bottom:4px">Monitor de viento en vivo · Valparaíso · Metropolitana · O'Higgins</div>
+  <div class="brand">
+    <img src="logo.png" alt="Puelche" class="brand-logo" />
+    <div class="muted brand-sub">Monitor de viento en vivo · Valparaíso · Metropolitana · O'Higgins</div>
+  </div>
   <div class="regions">
     <button onclick="goRegion('valpo')">Valpo</button>
     <button onclick="goRegion('rm')">RM</button>
