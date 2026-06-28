@@ -46,10 +46,46 @@
   .credit .by b { font-size: 12px; font-family: 'Electrolize', system-ui, sans-serif; color: #1a3a5c; }
   .credit a { color: #5a2da0; text-decoration: none; }
   .credit a:hover { text-decoration: underline; }
+  #panelToggle { display: none; }
   /* Forzar Electrolize en los componentes que Leaflet dibuja aparte */
   .leaflet-container, .leaflet-popup-content, .leaflet-control-layers,
   .leaflet-control, .leaflet-velocity-control {
     font-family: 'Electrolize', system-ui, sans-serif !important;
+  }
+  /* === Adaptación a móvil === */
+  @media (max-width: 640px) {
+    .panel {
+      top: 6px; left: 6px; right: 6px; max-width: none;
+      padding: 8px 10px;
+    }
+    .brand { margin-bottom: 0; gap: 8px; }
+    .brand-logo { width: 46px; height: 46px; }
+    .brand-sub { font-size: 11px; line-height: 1.3; }
+    #panelToggle {
+      display: block; margin-left: auto; flex-shrink: 0;
+      background: #eee; border: none; border-radius: 6px;
+      width: 30px; height: 30px; font-size: 16px; cursor: pointer; color: #333;
+    }
+    /* La leyenda y controles arrancan ocultos en móvil; se abren con el botón */
+    .panel-body { display: none; margin-top: 8px; }
+    .panel.open .panel-body { display: block; }
+    .panel.open #panelToggle { transform: rotate(180deg); }
+    .regions button { padding: 8px 2px; font-size: 13px; } /* más altos para el dedo */
+    .legend-row { margin: 4px 0; font-size: 13px; }
+    #stormBtn { padding: 12px 6px !important; font-size: 14px; } /* botón táctil grande */
+
+    .credit {
+      bottom: 6px; left: 6px; right: auto; padding: 4px 8px 4px 4px;
+      font-size: 9px; max-width: 60%;
+    }
+    .credit .sig { width: 18px; height: 34px; }
+    .credit .by b { font-size: 10px; }
+
+    /* Control de capas: más compacto y tocable */
+    .leaflet-control-layers { font-size: 12px !important; }
+    .leaflet-control-layers label { margin: 4px 0; }
+    /* Botones de zoom más grandes para el dedo */
+    .leaflet-touch .leaflet-bar a { width: 34px; height: 34px; line-height: 34px; }
   }
 </style>
 </head>
@@ -66,7 +102,9 @@
   <div class="brand">
     <img src="logo.png" alt="Puelche" class="brand-logo" />
     <div class="muted brand-sub">Monitor de viento en vivo · Valparaíso · Metropolitana · O'Higgins</div>
+    <button id="panelToggle" aria-label="Mostrar/ocultar detalles">▾</button>
   </div>
+  <div class="panel-body" id="panelBody">
   <div class="regions">
     <button onclick="goRegion('valpo')">Valpo</button>
     <button onclick="goRegion('rm')">RM</button>
@@ -83,6 +121,7 @@
   <button id="stormBtn" style="margin-top:8px;width:100%;padding:6px;border:none;border-radius:6px;
     background:#5a2da0;color:#fff;font-weight:600;cursor:pointer">⚡ Modo extremo · 5 min (1 h)</button>
   <div class="muted" id="stormStatus"></div>
+  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -328,6 +367,13 @@ async function loadData() {
   } catch (e) {
     document.getElementById("status").textContent = "Error al cargar datos.";
   }
+}
+
+// --- Panel colapsable en móvil ---
+const panelEl = document.querySelector(".panel");
+const panelToggle = document.getElementById("panelToggle");
+if (panelToggle) {
+  panelToggle.addEventListener("click", () => panelEl.classList.toggle("open"));
 }
 
 // --- Modo extremo (manual) ---
